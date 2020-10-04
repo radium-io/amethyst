@@ -104,6 +104,31 @@ mod test {
         );
     }
 
+    #[test]
+    fn load_assets_with_bom_encodings() {
+        let test_assets_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/assets");
+        let directory = Directory::new(test_assets_dir);
+
+        assert_eq!(
+            b"amethyst".to_vec(),
+            directory
+                .load("encodings/UTF8-BOM")
+                .expect("Failed to parse UTF8 file with BOM")
+        );
+        assert_eq!(
+            b"amethyst".to_vec(),
+            directory
+                .load("encodings/UTF16-LE-BOM")
+                .expect("Failed to parse UTF16-LE file with BOM")
+        );
+        assert_eq!(
+            b"amethyst".to_vec(),
+            directory
+                .load("encodings/UTF16-BE-BOM")
+                .expect("Failed to parse UTF16-BE file with BOM")
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn tolerates_backslashed_location_with_forward_slashed_asset_paths() {
