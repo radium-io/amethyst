@@ -43,7 +43,7 @@ impl CachedSelectionOrder {
 }
 
 /// System in charge of updating the CachedSelectionOrder resource on each frame.
-pub fn build_cache_selection_order_system<G>() -> Box<dyn Schedulable>
+pub fn build_cache_selection_order_system<G>() -> Box<dyn Runnable>
 where
     G: PartialEq + Send + Sync + 'static,
 {

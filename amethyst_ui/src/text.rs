@@ -154,7 +154,7 @@ impl TextEditingMouseSystem {
         }
     }
 
-    pub fn build_text_editing_mouse_system(&self) -> Box<dyn Schedulable> {
+    pub fn build_text_editing_mouse_system(&self) -> Box<dyn Runnable> {
         SystemBuilder::<()>::new("TextEditingMouseSystem")
             .read_resource::<EventChannel<Event>>()
             .read_resource::<ScreenDimensions>()
