@@ -7,13 +7,12 @@ use crate::{
     skinning::JointTransforms,
     submodules::{DynamicVertexBuffer, EnvironmentSub, MaterialId, MaterialSub, SkinningSub},
     system::GraphAuxData,
-    transparent::Transparent,
     types::{Backend, Mesh},
     util,
     visibility::Visibility,
 };
 use amethyst_assets::{AssetStorage, Handle};
-use amethyst_core::{ecs::prelude::*, transform::LocalToWorld, Hidden, HiddenPropagate};
+use amethyst_core::{ecs::*, transform::Transform};
 use derivative::Derivative;
 use rendy::{
     command::{QueueId, RenderPassEncoder},
@@ -210,28 +209,21 @@ impl<B: Backend, T: Base3DPassDef> RenderGroup<B, GraphAuxData> for DrawBase3D<B
         {
             profile_scope_impl!("prepare");
 
+            let mut query =
+                <(&Handle<Material>, &Handle<Mesh>, &Transform, Option<&Tint>)>::query();
+
             visibility
                 .visible_unordered
                 .iter()
-                .filter_map(|entity| {
-                    Some((
-                        entity,
-                        (
-                            world.get_component::<Handle<Material>>(*entity)?,
-                            world.get_component::<Handle<Mesh>>(*entity)?,
-                            world.get_component::<LocalToWorld>(*entity)?,
-                            world.get_component::<Tint>(*entity),
-                        ),
-                    ))
-                })
+                .filter_map(|entity| Some((entity, query.get(*world, *entity).ok()?)))
                 .map(|(entity, (mat, mesh, tform, tint))| {
                     if let Some(tint) = tint {
                         (
                             (mat, mesh.id()),
-                            VertexArgs::from_object_data(&tform, Some(&tint)),
+                            VertexArgs::from_object_data(tform, Some(&tint)),
                         )
                     } else {
-                        ((mat, mesh.id()), VertexArgs::from_object_data(&tform, None))
+                        ((mat, mesh.id()), VertexArgs::from_object_data(tform, None))
                     }
                 })
                 .for_each_group(|(mat, mesh_id), data| {
@@ -246,21 +238,18 @@ impl<B: Backend, T: Base3DPassDef> RenderGroup<B, GraphAuxData> for DrawBase3D<B
         if self.pipeline_skinned.is_some() {
             profile_scope_impl!("prepare_skinning");
 
+            let mut query = <(
+                &Handle<Material>,
+                &Handle<Mesh>,
+                &Transform,
+                Option<&Tint>,
+                &JointTransforms,
+            )>::query();
+
             visibility
                 .visible_unordered
                 .iter()
-                .filter_map(|entity| {
-                    Some((
-                        entity,
-                        (
-                            world.get_component::<Handle<Material>>(*entity)?,
-                            world.get_component::<Handle<Mesh>>(*entity)?,
-                            world.get_component::<LocalToWorld>(*entity)?,
-                            world.get_component::<Tint>(*entity),
-                            world.get_component::<JointTransforms>(*entity)?,
-                        ),
-                    ))
-                })
+                .filter_map(|entity| Some((entity, query.get(*world, *entity).ok()?)))
                 .map(|(_, (mat, mesh, tform, tint, joints))| {
                     if let Some(tint) = tint {
                         (
@@ -559,20 +548,13 @@ impl<B: Backend, T: Base3DPassDef> RenderGroup<B, GraphAuxData> for DrawBase3DTr
         {
             profile_scope_impl!("prepare");
 
+            let mut query =
+                <(&Handle<Material>, &Handle<Mesh>, &Transform, Option<&Tint>)>::query();
+
             visibility
                 .visible_ordered
                 .iter()
-                .filter_map(|entity| {
-                    Some((
-                        entity,
-                        (
-                            world.get_component::<Handle<Material>>(*entity)?,
-                            world.get_component::<Handle<Mesh>>(*entity)?,
-                            world.get_component::<LocalToWorld>(*entity)?,
-                            world.get_component::<Tint>(*entity),
-                        ),
-                    ))
-                })
+                .filter_map(|entity| Some((entity, query.get(*world, *entity).ok()?)))
                 .map(|(entity, (mat, mesh, tform, tint))| {
                     if let Some(tint) = tint {
                         (
@@ -600,21 +582,18 @@ impl<B: Backend, T: Base3DPassDef> RenderGroup<B, GraphAuxData> for DrawBase3DTr
         if self.pipeline_skinned.is_some() {
             profile_scope_impl!("prepare_skinning");
 
+            let mut query = <(
+                &Handle<Material>,
+                &Handle<Mesh>,
+                &Transform,
+                Option<&Tint>,
+                &JointTransforms,
+            )>::query();
+
             visibility
                 .visible_unordered
                 .iter()
-                .filter_map(|entity| {
-                    Some((
-                        entity,
-                        (
-                            world.get_component::<Handle<Material>>(*entity)?,
-                            world.get_component::<Handle<Mesh>>(*entity)?,
-                            world.get_component::<LocalToWorld>(*entity)?,
-                            world.get_component::<Tint>(*entity),
-                            world.get_component::<JointTransforms>(*entity)?,
-                        ),
-                    ))
-                })
+                .filter_map(|entity| Some((entity, query.get(*world, *entity).ok()?)))
                 .map(|(_, (mat, mesh, tform, tint, joints))| {
                     if let Some(tint) = tint {
                         (
@@ -805,7 +784,7 @@ fn build_pipelines<B: Backend, T: Base3DPassDef>(
         .with_framebuffer_size(framebuffer_width, framebuffer_height)
         .with_face_culling(pso::Face::BACK)
         .with_depth_test(pso::DepthTest {
-            fun: pso::Comparison::Less,
+            fun: pso::Comparison::Greater,
             write: !transparent,
         })
         .with_blend_targets(vec![pso::ColorBlendDesc {

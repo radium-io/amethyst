@@ -15,7 +15,7 @@ use specs::{
     storage::{UnprotectedStorage, VecStorage},
 };
 
-use amethyst_core::{ecs::prelude::*, ArcThreadPool, Time};
+use amethyst_core::{ecs::*, ArcThreadPool, Time};
 use amethyst_error::{Error, ResultExt};
 
 #[cfg(feature = "profiler")]
@@ -60,7 +60,7 @@ where
 {
     /// Asset is not fully loaded yet, need to wait longer
     Loading(A::Data),
-    /// Asset have finished loading, can now be inserted into storage and tracker notified
+    /// Asset has finished loading, can now be inserted into storage and tracker notified
     Loaded(A),
 }
 
@@ -136,7 +136,7 @@ impl<A: Asset> AssetStorage<A> {
         }
     }
 
-    /// Get an asset and it's version from a given asset handle.
+    /// Get an asset and its version from a given asset handle.
     pub fn get_with_version(&self, handle: &Handle<A>) -> Option<&(A, u32)> {
         if self.bitset.contains(handle.id()) {
             Some(unsafe { self.assets.get(handle.id()) })
@@ -145,7 +145,7 @@ impl<A: Asset> AssetStorage<A> {
         }
     }
 
-    /// Get an asset by it's handle id.
+    /// Get an asset by its handle id.
     pub fn get_by_id(&self, id: u32) -> Option<&A> {
         if self.bitset.contains(id) {
             Some(unsafe { &self.assets.get(id).0 })
@@ -193,8 +193,8 @@ impl<A: Asset> AssetStorage<A> {
         self.bitset.contains(id)
     }
 
-    /// Get an asset by it's handle id without checking the internal bitset.
-    /// Use `contains_id` to manually check it's status before access.
+    /// Get an asset by its handle id without checking the internal bitset.
+    /// Use `contains_id` to manually check its status before access.
     ///
     /// # Safety
     /// You must manually verify that given asset id is valid.
@@ -492,22 +492,45 @@ impl<A: Asset> Drop for AssetStorage<A> {
     }
 }
 
+/// A bundle for asset processor system, which also inserts the required [AssetStorage] resource.
+pub struct AssetProcessorSystemBundle<A: Asset + ProcessableAsset> {
+    _phantom: std::marker::PhantomData<A>,
+}
+
+impl<A: Asset + ProcessableAsset> Default for AssetProcessorSystemBundle<A> {
+    fn default() -> Self {
+        Self {
+            _phantom: Default::default(),
+        }
+    }
+}
+
+impl<A: Asset + ProcessableAsset> SystemBundle for AssetProcessorSystemBundle<A> {
+    fn load(
+        &mut self,
+        _world: &mut World,
+        resources: &mut Resources,
+        builder: &mut DispatcherBuilder,
+    ) -> Result<(), Error> {
+        resources.insert(AssetStorage::<A>::default());
+
+        builder.add_system(build_asset_processor_system::<A>());
+
+        Ok(())
+    }
+}
+
 /// A default implementation for an asset processing system
 /// which converts data to assets and maintains the asset storage
 /// for `A`.
 ///
 /// This system can only be used if the asset data implements
 /// `Into<Result<A, BoxedErr>>`.
-pub fn build_asset_processor_system<A>(
-    _world: &mut World,
-    resources: &mut Resources,
-) -> Box<dyn Schedulable>
+pub fn build_asset_processor_system<A>() -> impl Runnable
 where
     A: Asset + ProcessableAsset,
 {
-    resources.insert(AssetStorage::<A>::default());
-
-    SystemBuilder::<()>::new("AssetProcessorSystem")
+    SystemBuilder::new("AssetProcessorSystem")
         .write_resource::<AssetStorage<A>>()
         .read_resource::<ArcThreadPool>()
         .read_resource::<Time>()

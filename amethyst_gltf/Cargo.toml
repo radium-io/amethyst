@@ -1,6 +1,6 @@
 [package]
 name = "amethyst_gltf"
-version = "0.10.0"
+version = "0.15.3"
 authors = ["Rhuagh <seamonr@gmail.com>", "Amethyst Foundation <contact@amethyst.rs>"]
 edition = "2018"
 description = "GLTF asset loading"
@@ -15,15 +15,15 @@ license = "MIT/Apache-2.0"
 travis-ci = { repository = "amethyst/amethyst" }
 
 [dependencies]
-amethyst_assets = { path = "../amethyst_assets", version = "0.11.0" }
-amethyst_animation = { path = "../amethyst_animation", version = "0.10.0" }
-amethyst_core = { path = "../amethyst_core", version = "0.10.0" }
-amethyst_error = { path = "../amethyst_error", version = "0.5.0" }
-amethyst_rendy = { path = "../amethyst_rendy", version = "0.5.0" }
+amethyst_assets = { path = "../amethyst_assets", version = "0.15.3" }
+amethyst_animation = { path = "../amethyst_animation", version = "0.15.3" }
+amethyst_core = { path = "../amethyst_core", version = "0.15.3" }
+amethyst_error = { path = "../amethyst_error", version = "0.15.3" }
+amethyst_rendy = { path = "../amethyst_rendy", version = "0.15.3" }
 err-derive = "0.2.3"
 base64 = "0.11"
 fnv = "1"
-gltf = "0.15"
+gltf = { version = "0.15", features = ["KHR_lights_punctual"] }
 hibitset = { version = "0.6.2", features = ["parallel"] }
 itertools = "0.8"
 log = "0.4.6"

@@ -13,7 +13,7 @@ use rodio::SpatialSink;
 #[cfg(feature = "profiler")]
 use thread_profiler::profile_scope;
 
-use amethyst_core::{ecs::prelude::*, math::convert, transform::LocalToWorld};
+use amethyst_core::{ecs::*, math::convert, transform::Transform};
 
 use crate::{
     components::{AudioEmitter, AudioListener},
@@ -32,12 +32,12 @@ pub struct AudioSystem(Output);
 pub struct SelectedListener(pub Entity);
 
 /// Creates a new audio system.
-pub fn build_audio_system(_world: &mut World, _res: &mut Resources) -> Box<dyn Schedulable> {
-    SystemBuilder::<()>::new("AudioSystem")
+pub fn build_audio_system() -> impl Runnable {
+    SystemBuilder::new("AudioSystem")
         .read_resource::<Option<Output>>()
         .read_resource::<Option<SelectedListener>>()
-        .with_query(<Read<AudioListener>>::query())
-        .with_query(<(Write<AudioEmitter>, Read<LocalToWorld>)>::query())
+        .with_query(<(Entity, Read<AudioListener>)>::query())
+        .with_query(<(Write<AudioEmitter>, Read<Transform>)>::query())
         .build(
             move |_commands,
                   world,
@@ -48,32 +48,28 @@ pub fn build_audio_system(_world: &mut World, _res: &mut Resources) -> Box<dyn S
                 // Process emitters and listener.
                 if let Some((entity, listener)) = select_listener
                     .as_ref()
-                    .and_then(|sl| {
+                    .and_then(|select_listener| {
+                        // Find entity refered by SelectedListener resource
                         world
-                            .get_component::<AudioListener>(sl.0)
-                            .map(|c| (sl.0, (*c).clone()))
+                            .entry_ref(select_listener.0)
+                            .ok()
+                            .and_then(|entry| entry.into_component::<AudioListener>().ok())
+                            .map(|audio_listener| (select_listener.0, audio_listener))
                     })
                     .or_else(|| {
+                        // Otherwise, select the first available AudioListener
                         q_audio_listener
-                            .iter_entities(world)
+                            .iter(world)
                             .next()
-                            .map(|(e, c)| (e, (*c).clone()))
+                            .map(|(entity, audio_listener)| (*entity, audio_listener))
                     })
                 {
-                    if let Some(listener_transform) = select_listener
-                        .as_ref()
-                        .and_then(|sl| {
-                            world
-                                .get_component::<LocalToWorld>(sl.0)
-                                .map(|c| (*c).clone())
-                        })
-                        .or_else(|| {
-                            world
-                                .get_component::<LocalToWorld>(entity)
-                                .map(|c| (*c).clone())
-                        })
+                    if let Some(listener_transform) = world
+                        .entry_ref(entity)
+                        .ok()
+                        .and_then(|entry| entry.into_component::<Transform>().ok())
                     {
-                        let listener_transform = listener_transform.0;
+                        let listener_transform = listener_transform.global_matrix();
                         let left_ear_position: [f32; 3] = {
                             let pos = listener_transform
                                 .transform_point(&listener.left_ear)
@@ -90,9 +86,9 @@ pub fn build_audio_system(_world: &mut World, _res: &mut Resources) -> Box<dyn S
                         };
                         q_audio_emitter.for_each_mut(world, |(mut audio_emitter, transform)| {
                             let emitter_position: [f32; 3] = {
-                                let x = transform.0[(0, 3)];
-                                let y = transform.0[(1, 3)];
-                                let z = transform.0[(2, 3)];
+                                let x = transform.global_matrix()[(0, 3)];
+                                let y = transform.global_matrix()[(1, 3)];
+                                let z = transform.global_matrix()[(2, 3)];
                                 [convert(x), convert(y), convert(z)]
                             };
                             // Remove all sinks whose sounds have ended.

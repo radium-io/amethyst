@@ -3,14 +3,11 @@
 use crate::{
     bundle::{RenderOrder, RenderPlan, RenderPlugin, Target},
     pass::*,
-    sprite_visibility::build_sprite_visibility_sorting_system,
-    visibility::build_visibility_sorting_system,
+    sprite_visibility::{build_sprite_visibility_sorting_system, SpriteVisibility},
+    visibility::{build_visibility_sorting_system, Visibility},
     Backend, Factory,
 };
-use amethyst_core::{
-    dispatcher::{DispatcherBuilder, Stage, SystemBundle},
-    ecs::prelude::*,
-};
+use amethyst_core::ecs::*;
 use amethyst_error::Error;
 use palette::Srgb;
 use rendy::graph::render::RenderGroupDesc;
@@ -63,6 +60,24 @@ mod window {
         }
 
         /// Clear window with specified color every frame.
+        /// This function takes linear RGBA. You can convert rgba to linear rgba like so:
+        ///
+        /// ```
+        /// use amethyst_rendy::palette::Srgba;
+        /// use amethyst_rendy::RenderToWindow;
+        /// use amethyst_window::DisplayConfig;
+        ///
+        /// let your_red: f32 = 255.;
+        /// let your_green: f32 = 160.;
+        /// let your_blue: f32 = 122.;
+        /// let your_alpha: f32 = 1.0;
+        ///
+        /// let (r, g, b, a) = Srgba::new(your_red / 255., your_green / 255., your_blue / 255., your_alpha)
+        ///     .into_linear()
+        ///     .into_components();
+        ///
+        /// RenderToWindow::from_config(DisplayConfig::default()).with_clear([r, g, b, a]);
+        /// ```
         pub fn with_clear(mut self, clear: impl Into<ClearColor>) -> Self {
             self.clear = Some(clear.into());
             self
@@ -74,10 +89,10 @@ mod window {
             &mut self,
             world: &mut World,
             resources: &mut Resources,
-            builder: &mut DispatcherBuilder<'_>,
+            builder: &mut DispatcherBuilder,
         ) -> Result<(), Error> {
             if let Some(config) = self.config.take() {
-                WindowBundle::from_config(config).build(world, resources, builder)?;
+                builder.add_bundle(WindowBundle::from_config(config));
             }
 
             Ok(())
@@ -112,7 +127,7 @@ mod window {
                 kind: window_kind,
                 levels: 1,
                 format: Format::D32Sfloat,
-                clear: Some(ClearValue::DepthStencil(ClearDepthStencil(1.0, 0))),
+                clear: Some(ClearValue::DepthStencil(ClearDepthStencil(0.0, 0))),
             };
 
             plan.add_root(Target::Main);
@@ -170,9 +185,10 @@ impl<B: Backend, D: Base3DPassDef> RenderPlugin<B> for RenderBase3D<D> {
         &mut self,
         world: &mut World,
         resources: &mut Resources,
-        builder: &mut DispatcherBuilder<'_>,
+        builder: &mut DispatcherBuilder,
     ) -> Result<(), Error> {
-        builder.add_system(Stage::Render, build_visibility_sorting_system);
+        resources.insert(Visibility::default());
+        builder.add_system(build_visibility_sorting_system());
         Ok(())
     }
 
@@ -223,9 +239,10 @@ impl<B: Backend> RenderPlugin<B> for RenderFlat2D {
         &mut self,
         world: &mut World,
         resources: &mut Resources,
-        builder: &mut DispatcherBuilder<'_>,
+        builder: &mut DispatcherBuilder,
     ) -> Result<(), Error> {
-        builder.add_system(Stage::Render, build_sprite_visibility_sorting_system);
+        resources.insert(SpriteVisibility::default());
+        builder.add_system(build_sprite_visibility_sorting_system());
         Ok(())
     }
 

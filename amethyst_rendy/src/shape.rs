@@ -23,10 +23,11 @@ fn option_none<T>() -> Option<T> {
 /// ### Type parameters:
 ///
 /// `V`: Vertex format to use, must be one of:
-///     * `Vec<PosTex>`
-///     * `Vec<PosNormTex>`
-///     * `Vec<PosNormTangTex>`
-///     * `ComboMeshCreator`
+///
+/// - `Vec<PosTex>`
+/// - `Vec<PosNormTex>`
+/// - `Vec<PosNormTangTex>`
+/// - `ComboMeshCreator`
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(bound = "")]
 pub struct ShapePrefab<V> {
@@ -154,10 +155,11 @@ impl Shape {
     /// ### Type parameters:
     ///
     /// `V`: Vertex format to use, must to be one of:
-    ///     * `Vec<PosTex>`
-    ///     * `Vec<PosNormTex>`
-    ///     * `Vec<PosNormTangTex>`
-    ///     * `ComboMeshCreator`
+    ///
+    /// - `Vec<PosTex>`
+    /// - `Vec<PosNormTex>`
+    /// - `Vec<PosNormTangTex>`
+    /// - `ComboMeshCreator`
     /// `P`: Progress tracker type
     pub fn upload<V, P>(
         &self,
@@ -183,10 +185,11 @@ impl Shape {
     /// ### Type parameters:
     ///
     /// `V`: Vertex format to use, must to be one of:
-    ///     * `Vec<PosTex>`
-    ///     * `Vec<PosNormTex>`
-    ///     * `Vec<PosNormTangTex>`
-    ///     * `ComboMeshCreator`
+    ///
+    /// - `Vec<PosTex>`
+    /// - `Vec<PosNormTex>`
+    /// - `Vec<PosNormTangTex>`
+    /// - `ComboMeshCreator`
     pub fn generate<V>(&self, scale: Option<(f32, f32, f32)>) -> MeshBuilder<'static>
     where
         V: FromShape + Into<MeshBuilder<'static>>,
@@ -203,10 +206,11 @@ impl Shape {
     /// ### Type parameters:
     ///
     /// `V`: Vertex format to use, must to be one of:
-    ///     * `Vec<PosTex>`
-    ///     * `Vec<PosNormTex>`
-    ///     * `Vec<PosNormTangTex>`
-    ///     * `ComboMeshCreator`
+    ///
+    /// - `Vec<PosTex>`
+    /// - `Vec<PosNormTex>`
+    /// - `Vec<PosNormTangTex>`
+    /// - `ComboMeshCreator`
     pub fn generate_vertices<V>(&self, scale: Option<(f32, f32, f32)>) -> V
     where
         V: FromShape,
@@ -267,12 +271,12 @@ where
                 let v = vertices[u];
                 let pos = scale
                     .map(|(x, y, z)| Vector3::new(v.pos.x * x, v.pos.y * y, v.pos.z * z))
-                    .unwrap_or_else(|| Vector3::from(v.pos));
+                    .unwrap_or_else(|| Vector3::new(v.pos.x, v.pos.y, v.pos.z));
                 let normal = scale
                     .map(|(x, y, z)| {
                         Vector3::new(v.normal.x * x, v.normal.y * y, v.normal.z * z).normalize()
                     })
-                    .unwrap_or_else(|| Vector3::from(v.normal));
+                    .unwrap_or_else(|| Vector3::new(v.normal.x, v.normal.y, v.normal.z));
                 let tangent1 = normal.cross(&Vector3::x());
                 let tangent2 = normal.cross(&Vector3::y());
                 let tangent = if tangent1.norm_squared() > tangent2.norm_squared() {

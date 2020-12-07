@@ -1,4 +1,6 @@
-use crate::{input_handler::InputHandler, BindingTypes};
+use std::borrow::Cow;
+
+use crate::input_handler::InputHandler;
 use winit::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 
 /// If this event was for manipulating a keyboard key then this will return the `VirtualKeyCode`
@@ -54,13 +56,18 @@ pub fn is_close_requested(event: &Event) -> bool {
 
 /// Gets the input axis value from the `InputHandler`.
 /// If the name is None, it will return the default value of the axis (0.0).
-pub fn get_input_axis_simple<T: BindingTypes>(
-    name: &Option<T::Axis>,
-    input: &InputHandler<T>,
-) -> f32 {
+pub fn get_input_axis_simple(name: &Option<Cow<'static, str>>, input: &InputHandler) -> f32 {
     name.as_ref()
         .and_then(|ref n| input.axis_value(n))
         .unwrap_or(0.0)
+}
+
+/// Gets the action active status from the `InputHandler`.
+/// If the action name is None, it will default to false.
+pub fn get_action_simple(name: &Option<Cow<'static, str>>, input: &InputHandler) -> bool {
+    name.as_ref()
+        .and_then(|ref n| input.action_is_down(n))
+        .unwrap_or(false)
 }
 
 /// If this event was for manipulating a mouse button, this will return the `MouseButton`

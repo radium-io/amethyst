@@ -5,9 +5,9 @@ use crate::{
     resources::AmbientColor,
 };
 use amethyst_core::{
-    ecs::prelude::*,
+    ecs::*,
     math::{convert, Matrix4, Vector3},
-    transform::LocalToWorld,
+    transform::Transform,
 };
 use glsl_layout::*;
 
@@ -37,9 +37,9 @@ impl CameraGatherer {
         // Find if such camera exists
         let entity = active_camera
             .and_then(|active_camera| {
-                <Read<Camera>>::query()
-                    .iter_entities(world)
-                    .map(|(e, _)| e)
+                <(Entity, Read<Camera>)>::query()
+                    .iter(world)
+                    .map(|(e, _)| *e)
                     .find(|e| active_camera == *e)
             })
             .or_else(|| None);
@@ -49,10 +49,10 @@ impl CameraGatherer {
             Some(entity) => Some(entity),
             None => {
                 // Fetch first available camera
-                <Read<Camera>>::query()
-                    .iter_entities(world)
+                <(Entity, Read<Camera>)>::query()
+                    .iter(world)
                     .nth(0)
-                    .map(|(e, _)| e)
+                    .map(|(e, _)| *e)
             }
         }
     }
@@ -67,28 +67,35 @@ impl CameraGatherer {
         profile_scope!("gather_cameras");
 
         let defcam = Camera::standard_2d(1.0, 1.0);
-        let identity = LocalToWorld::identity();
+        let identity = Transform::default();
 
         let camera_entity = Self::gather_camera_entity(world, resources);
 
         let camera = camera_entity
-            .map(|e| world.get_component::<Camera>(e))
+            .map(|e| world.entry_ref(e).unwrap().into_component::<Camera>().ok())
             .flatten();
         let camera = camera.as_deref().unwrap_or(&defcam);
 
         let transform = camera_entity
-            .map(|e| world.get_component::<LocalToWorld>(e))
+            .map(|e| {
+                world
+                    .entry_ref(e)
+                    .unwrap()
+                    .into_component::<Transform>()
+                    .ok()
+            })
             .flatten();
         let transform = transform.as_deref().unwrap_or(&identity);
 
-        let camera_position = convert::<_, Vector3<f32>>(transform.column(3).xyz()).into_pod();
+        let camera_position =
+            convert::<_, Vector3<f32>>(transform.global_matrix().column(3).xyz()).into_pod();
 
-        let proj = camera.as_matrix();
-        let view = &**transform;
+        let proj = &camera.matrix;
+        let view = transform.global_view_matrix();
 
         let proj_view: [[f32; 4]; 4] = ((*proj) * view).into();
         let proj: [[f32; 4]; 4] = (*proj).into();
-        let view: [[f32; 4]; 4] = (*view).into();
+        let view: [[f32; 4]; 4] = convert::<_, Matrix4<f32>>(view).into();
 
         let projview = pod::ViewArgs {
             proj: proj.into(),

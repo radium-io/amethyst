@@ -1,9 +1,9 @@
 //! Input system
 use winit::Event;
 
-use crate::{BindingTypes, InputEvent, InputHandler};
+use crate::{InputEvent, InputHandler};
 use amethyst_core::{
-    ecs::prelude::*,
+    ecs::*,
     shrev::{EventChannel, ReaderId},
 };
 use amethyst_window::ScreenDimensions;
@@ -15,19 +15,11 @@ use thread_profiler::profile_scope;
 ///
 /// Will read `winit::Event` from `EventHandler<winit::Event>`, process them with `InputHandler`,
 /// and push the results in `EventHandler<InputEvent>`.
-pub fn build_input_system<T: BindingTypes>(
-    world: &mut World,
-    resources: &mut Resources,
-) -> Box<dyn Schedulable> {
-    let mut reader = resources
-        .get_mut::<EventChannel<Event>>()
-        .unwrap()
-        .register_reader();
-
-    SystemBuilder::<()>::new("InputSystem")
+pub fn build_input_system(mut reader: ReaderId<Event>) -> impl Runnable {
+    SystemBuilder::new("InputSystem")
         .read_resource::<EventChannel<Event>>()
-        .write_resource::<InputHandler<T>>()
-        .write_resource::<EventChannel<InputEvent<T>>>()
+        .write_resource::<InputHandler>()
+        .write_resource::<EventChannel<InputEvent>>()
         .read_resource::<ScreenDimensions>()
         .build(
             move |_commands, _world, (input, handler, output, screen_dimensions), _query| {

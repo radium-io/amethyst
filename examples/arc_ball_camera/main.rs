@@ -1,96 +1,154 @@
-//! Demonstrates how to use the fly camera
+//! Demonstrates the arc ball camera
 
 use amethyst::{
-    assets::{PrefabLoader, PrefabLoaderSystemDesc, RonFormat},
-    controls::{ArcBallControlBundle, ArcBallControlTag},
+    assets::{AssetStorage, Loader},
+    controls::{ArcBallControl, ArcBallControlBundle, HideCursor},
     core::{
-        shrev::{EventChannel, ReaderId},
+        frame_limiter::FrameRateLimitStrategy,
         transform::{Transform, TransformBundle},
     },
-    derive::SystemDesc,
-    ecs::prelude::{Join, Read, ReadStorage, System, SystemData, WorldExt, WriteStorage},
-    input::{
-        is_key_down, InputBundle, InputEvent, ScrollDirection, StringBindings, VirtualKeyCode,
-    },
+    input::{is_key_down, is_mouse_button_down, InputBundle, StringBindings},
     prelude::*,
     renderer::{
-        palette::Srgb,
-        plugins::{RenderShaded3D, RenderSkybox, RenderToWindow},
-        rendy::mesh::{Normal, Position, TexCoord},
+        camera::Camera,
+        light::{Light, PointLight},
+        mtl::{Material, MaterialDefaults},
+        palette::{LinSrgba, Srgb},
+        plugins::{RenderShaded3D, RenderToWindow},
+        rendy::{
+            mesh::{Normal, Position, Tangent, TexCoord},
+            texture::palette::load_from_linear_rgba,
+        },
+        shape::Shape,
         types::DefaultBackend,
-        RenderingBundle,
+        Mesh, RenderingBundle, Texture,
     },
-    utils::{application_root_dir, scene::BasicScenePrefab},
+    utils::application_root_dir,
+    window::ScreenDimensions,
+    winit::{MouseButton, VirtualKeyCode},
     Error,
 };
-
-type MyPrefabData = BasicScenePrefab<(Vec<Position>, Vec<Normal>, Vec<TexCoord>), f32>;
 
 struct ExampleState;
 
 impl SimpleState for ExampleState {
-    fn on_start(&mut self, data: StateData<'_, GameData<'_, '_>>) {
-        let prefab_handle = data.world.exec(|loader: PrefabLoader<'_, MyPrefabData>| {
-            loader.load("prefab/arc_ball_camera.ron", RonFormat, ())
+    fn on_start(&mut self, data: StateData<'_, GameData>) {
+        let StateData {
+            world, resources, ..
+        } = data;
+
+        let mat_defaults = resources.get::<MaterialDefaults>().unwrap().0.clone();
+        let loader = resources.get::<Loader>().unwrap();
+        let mesh_storage = resources.get::<AssetStorage<Mesh>>().unwrap();
+        let tex_storage = resources.get::<AssetStorage<Texture>>().unwrap();
+        let mtl_storage = resources.get::<AssetStorage<Material>>().unwrap();
+
+        println!("Load mesh");
+        let (mesh, albedo) = {
+            let mesh = loader.load_from_data(
+                Shape::Sphere(32, 32)
+                    .generate::<(Vec<Position>, Vec<Normal>, Vec<Tangent>, Vec<TexCoord>)>(None)
+                    .into(),
+                (),
+                &mesh_storage,
+            );
+
+            let albedo = loader.load_from_data(
+                load_from_linear_rgba(LinSrgba::new(1.0, 1.0, 1.0, 0.5)).into(),
+                (),
+                &tex_storage,
+            );
+
+            (mesh, albedo)
+        };
+
+        println!("Create spheres");
+        let spheres = (0..25).map(|n| {
+            let i = n / 5;
+            let j = n % 5;
+
+            let roughness = 1.0f32 * (i as f32 / 4.0f32);
+            let metallic = 1.0f32 * (j as f32 / 4.0f32);
+
+            let mut pos = Transform::default();
+            pos.set_translation_xyz(2.0f32 * (i - 2) as f32, 2.0f32 * (j - 2) as f32, 0.0);
+
+            let mtl = {
+                let metallic_roughness = loader.load_from_data(
+                    load_from_linear_rgba(LinSrgba::new(0.0, roughness, metallic, 0.0)).into(),
+                    (),
+                    &tex_storage,
+                );
+
+                loader.load_from_data(
+                    Material {
+                        albedo: albedo.clone(),
+                        metallic_roughness,
+                        ..mat_defaults.clone()
+                    },
+                    (),
+                    &mtl_storage,
+                )
+            };
+
+            (pos, mesh.clone(), mtl)
         });
-        data.world.create_entity().with(prefab_handle).build();
+
+        let target = world.extend(spheres).into_iter().nth(0).unwrap().clone();
+
+        println!("Create lights");
+        let light1: Light = PointLight {
+            intensity: 6.0,
+            color: Srgb::new(0.8, 0.0, 0.0),
+            ..PointLight::default()
+        }
+        .into();
+
+        let mut light1_transform = Transform::default();
+        light1_transform.set_translation_xyz(6.0, 6.0, -6.0);
+
+        let light2: Light = PointLight {
+            intensity: 5.0,
+            color: Srgb::new(0.0, 0.3, 0.7),
+            ..PointLight::default()
+        }
+        .into();
+
+        let mut light2_transform = Transform::default();
+        light2_transform.set_translation_xyz(6.0, -6.0, -6.0);
+
+        world.extend(vec![(light1, light1_transform), (light2, light2_transform)]);
+
+        println!("Put camera");
+
+        let mut transform = Transform::default();
+        transform.set_translation_xyz(0.0, 0.0, -12.0);
+        transform.prepend_rotation_y_axis(std::f32::consts::PI);
+
+        let (width, height) = {
+            let dim = resources.get::<ScreenDimensions>().unwrap();
+            (dim.width(), dim.height())
+        };
+
+        world.extend(vec![(
+            Camera::standard_3d(width, height),
+            transform,
+            ArcBallControl::new(target, 10.0),
+        )]);
     }
 
-    fn handle_event(
-        &mut self,
-        _: StateData<'_, GameData<'_, '_>>,
-        event: StateEvent,
-    ) -> SimpleTrans {
-        if let StateEvent::Window(event) = event {
+    fn handle_event(&mut self, data: StateData<'_, GameData>, event: StateEvent) -> SimpleTrans {
+        let StateData { resources, .. } = data;
+        if let StateEvent::Window(event) = &event {
             if is_key_down(&event, VirtualKeyCode::Escape) {
-                Trans::Quit
-            } else {
-                Trans::None
-            }
-        } else {
-            Trans::None
-        }
-    }
-}
-
-#[derive(SystemDesc)]
-#[system_desc(name(CameraDistanceSystemDesc))]
-struct CameraDistanceSystem {
-    #[system_desc(event_channel_reader)]
-    event_reader: ReaderId<InputEvent<StringBindings>>,
-}
-
-impl CameraDistanceSystem {
-    pub fn new(event_reader: ReaderId<InputEvent<StringBindings>>) -> Self {
-        CameraDistanceSystem { event_reader }
-    }
-}
-
-impl<'a> System<'a> for CameraDistanceSystem {
-    type SystemData = (
-        Read<'a, EventChannel<InputEvent<StringBindings>>>,
-        ReadStorage<'a, Transform>,
-        WriteStorage<'a, ArcBallControlTag>,
-    );
-
-    fn run(&mut self, (events, transforms, mut tags): Self::SystemData) {
-        for event in events.read(&mut self.event_reader) {
-            if let InputEvent::MouseWheelMoved(direction) = *event {
-                match direction {
-                    ScrollDirection::ScrollUp => {
-                        for (_, tag) in (&transforms, &mut tags).join() {
-                            tag.distance *= 0.9;
-                        }
-                    }
-                    ScrollDirection::ScrollDown => {
-                        for (_, tag) in (&transforms, &mut tags).join() {
-                            tag.distance *= 1.1;
-                        }
-                    }
-                    _ => (),
-                }
+                let mut hide_cursor = resources.get_mut::<HideCursor>().unwrap();
+                hide_cursor.hide = false;
+            } else if is_mouse_button_down(&event, MouseButton::Left) {
+                let mut hide_cursor = resources.get_mut::<HideCursor>().unwrap();
+                hide_cursor.hide = true;
             }
         }
+        Trans::None
     }
 }
 
@@ -99,34 +157,30 @@ fn main() -> Result<(), Error> {
 
     let app_root = application_root_dir()?;
 
-    let assets_dir = app_root.join("examples/assets");
+    let assets_dir = app_root.join("examples/arc_ball_camera/assets");
     let display_config_path = app_root.join("examples/arc_ball_camera/config/display.ron");
-
     let key_bindings_path = app_root.join("examples/arc_ball_camera/config/input.ron");
 
-    let game_data = GameDataBuilder::default()
-        .with_system_desc(PrefabLoaderSystemDesc::<MyPrefabData>::default(), "", &[])
-        .with_bundle(TransformBundle::new().with_dep(&[]))?
-        .with_bundle(
+    let mut builder = DispatcherBuilder::default();
+    builder
+        .add_bundle(TransformBundle)
+        .add_bundle(
             InputBundle::<StringBindings>::new().with_bindings_from_file(&key_bindings_path)?,
-        )?
-        .with_bundle(ArcBallControlBundle::<StringBindings>::new())?
-        .with_system_desc(
-            CameraDistanceSystemDesc::default(),
-            "camera_distance_system",
-            &["input_system"],
         )
-        .with_bundle(
+        .add_bundle(ArcBallControlBundle::<StringBindings>::new().with_sensitivity(0.1, 0.1))
+        .add_bundle(
             RenderingBundle::<DefaultBackend>::new()
-                .with_plugin(RenderToWindow::from_config_path(display_config_path)?)
-                .with_plugin(RenderShaded3D::default())
-                .with_plugin(RenderSkybox::with_colors(
-                    Srgb::new(0.82, 0.51, 0.50),
-                    Srgb::new(0.18, 0.11, 0.85),
-                )),
-        )?;
+                .with_plugin(
+                    RenderToWindow::from_config_path(display_config_path)?
+                        .with_clear([0.0, 0.0, 0.0, 1.0]),
+                )
+                .with_plugin(RenderShaded3D::default()),
+        );
 
-    let mut game = Application::build(assets_dir, ExampleState)?.build(game_data)?;
+    let mut game = Application::build(assets_dir, ExampleState)?
+        .with_frame_limit(FrameRateLimitStrategy::Sleep, 60)
+        .build(builder)?;
+
     game.run();
     Ok(())
 }

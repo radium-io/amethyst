@@ -1,13 +1,8 @@
 //! Provides a automatically resized orthographic camera.
 
-use amethyst_assets::PrefabData;
-use amethyst_core::{
-    ecs::{Component, DenseVecStorage, Entity, Join, ReadExpect, System, WriteStorage},
-    Axis2,
-};
-use amethyst_derive::PrefabData;
-use amethyst_error::Error;
-use amethyst_rendy::camera::{Camera, Orthographic};
+//use amethyst_assets::PrefabData;
+use amethyst_core::{ecs::*, Axis2};
+use amethyst_rendy::camera::Camera;
 use amethyst_window::ScreenDimensions;
 use derive_new::new;
 
@@ -28,6 +23,10 @@ pub struct CameraOrthoWorldCoordinates {
     pub bottom: f32,
     /// Top y coordinate
     pub top: f32,
+    /// Height of near plane
+    pub near: f32,
+    /// Height of far plane
+    pub far: f32,
 }
 
 impl CameraOrthoWorldCoordinates {
@@ -38,6 +37,8 @@ impl CameraOrthoWorldCoordinates {
             right: 1.0,
             bottom: 0.0,
             top: 1.0,
+            near: 0.1,
+            far: 2000.0,
         }
     }
 
@@ -87,8 +88,8 @@ impl Default for CameraOrthoWorldCoordinates {
 ///     .with(CameraOrtho::normalized(CameraNormalizeMode::Contain))
 ///     .build();
 /// ```
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, PrefabData, new)]
-#[prefab(Component)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, new)]
+//#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, PrefabData, new)]
 pub struct CameraOrtho {
     /// How the camera's matrix is changed when the window's aspect ratio changes.
     /// See `CameraNormalizeMode` for more info.
@@ -114,10 +115,6 @@ impl CameraOrtho {
         self.mode
             .camera_offsets(window_aspect_ratio, &self.world_coordinates)
     }
-}
-
-impl Component for CameraOrtho {
-    type Storage = DenseVecStorage<Self>;
 }
 
 /// Settings that decide how to scale the camera's matrix when the aspect ratio changes.
@@ -231,40 +228,32 @@ impl Default for CameraNormalizeMode {
 
 /// System that automatically changes the camera matrix according to the settings in
 /// the `CameraOrtho` attached to the camera entity.
-#[derive(Default, Debug)]
-pub struct CameraOrthoSystem;
+pub fn build_camera_normalize_system() -> impl Runnable {
+    SystemBuilder::new("camera_ortho_system")
+        .read_resource::<ScreenDimensions>()
+        .with_query(<(Write<Camera>, Write<CameraOrtho>)>::query())
+        .build(move |_, subworld, dimensions, query| {
+            #[cfg(feature = "profiler")]
+            profile_scope!("camera_ortho_system");
 
-impl<'a> System<'a> for CameraOrthoSystem {
-    type SystemData = (
-        ReadExpect<'a, ScreenDimensions>,
-        WriteStorage<'a, Camera>,
-        WriteStorage<'a, CameraOrtho>,
-    );
+            let aspect = dimensions.aspect_ratio();
 
-    #[allow(clippy::float_cmp)] // cmp just used to recognize change
-    fn run(&mut self, (dimensions, mut cameras, mut ortho_cameras): Self::SystemData) {
-        #[cfg(feature = "profiler")]
-        profile_scope!("camera_ortho_system");
+            for (camera, ortho_camera) in query.iter_mut(subworld) {
+                if aspect != ortho_camera.aspect_ratio_cache {
+                    ortho_camera.aspect_ratio_cache = aspect;
+                    let offsets = ortho_camera.camera_offsets(aspect);
 
-        let aspect = dimensions.aspect_ratio();
-
-        for (camera, mut ortho_camera) in (&mut cameras, &mut ortho_cameras).join() {
-            if aspect != ortho_camera.aspect_ratio_cache {
-                ortho_camera.aspect_ratio_cache = aspect;
-                let offsets = ortho_camera.camera_offsets(aspect);
-
-                let (near, far) = if let Some(prev) = camera.projection().as_orthographic() {
-                    (prev.near(), prev.far())
-                } else {
-                    continue;
-                };
-
-                camera.set_projection(
-                    Orthographic::new(offsets.0, offsets.1, offsets.2, offsets.3, near, far).into(),
-                );
+                    *camera = Camera::orthographic(
+                        offsets.0,
+                        offsets.1,
+                        offsets.2,
+                        offsets.3,
+                        ortho_camera.world_coordinates.near,
+                        ortho_camera.world_coordinates.far,
+                    );
+                }
             }
-        }
-    }
+        })
 }
 
 #[cfg(test)]
@@ -376,6 +365,8 @@ mod test {
             right: 800.,
             bottom: 0.,
             top: 600.,
+            near: 0.1,
+            far: 2000.,
         };
         let cam = CameraOrtho::new(CameraNormalizeMode::Contain, camera_ortho_world_coordinates);
         assert_eq!((-200.0, 1000.0, 0.0, 600.0), cam.camera_offsets(aspect));
@@ -391,6 +382,8 @@ mod test {
                 right: 1.0,
                 top: 0.0,
                 bottom: 1.0,
+                near: 0.1,
+                far: 2000.,
             },
             aspect_ratio_cache: 0.0,
         };
@@ -407,6 +400,8 @@ mod test {
                 right: 2.0,
                 top: 2.0,
                 bottom: 0.0,
+                near: 0.1,
+                far: 2000.,
             },
             aspect_ratio_cache: 0.0,
         };
@@ -423,6 +418,8 @@ mod test {
                 right: 2.0,
                 top: 2.0,
                 bottom: 0.0,
+                near: 0.1,
+                far: 2000.,
             },
             aspect_ratio_cache: 0.0,
         };
@@ -439,6 +436,8 @@ mod test {
                 right: 2.0,
                 top: 2.0,
                 bottom: 0.0,
+                near: 0.1,
+                far: 2000.,
             },
             aspect_ratio_cache: 0.0,
         };

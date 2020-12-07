@@ -9,7 +9,7 @@ The following snippet demonstrates how to set up a `Camera` that sees entities w
 use amethyst::{
     core::{math::Orthographic3, transform::Transform},
     prelude::*,
-    renderer::camera::{Camera, Projection},
+    renderer::camera::Camera,
     window::ScreenDimensions,
 };
 
@@ -36,15 +36,14 @@ impl ExampleState {
         let mut transform = Transform::default();
         transform.set_translation_xyz(0., height, 10.);
 
-        let mut camera = Camera::standard_3d(width, height);
-        camera.set_projection(Projection::orthographic(
+        let camera = Camera::orthographic(
             0.0,
             width,
             0.0,
             height,
             0.0,
             20.0,
-        ));
+        );
 
         let camera = world
             .create_entity()
@@ -55,9 +54,8 @@ impl ExampleState {
 }
 ```
 
-And you're done! If you would like to see this in practice, check out the [*sprites*][ex_sprites] or [*sprites_ordered*][ex_ordered] examples in the [examples][ex_all] directory.
+And you're done! If you would like to see this in practice, check out the [*sprites_ordered*][ex_ordered] example in the [examples][ex_all] directory.
 
 [ex_all]: https://github.com/amethyst/amethyst/tree/master/examples
 [ex_ordered]: https://github.com/amethyst/amethyst/tree/master/examples/sprites_ordered
-[ex_sprites]: https://github.com/amethyst/amethyst/tree/master/examples/sprites
 [opengl_ortho]: https://opengl-notes.readthedocs.io/en/latest/topics/transforms/viewing.html#orthographic-projection

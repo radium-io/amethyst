@@ -22,8 +22,8 @@ use amethyst_core::{
 };
 use amethyst_error::Error;
 use amethyst_rendy::{
-    camera::CameraPrefab, formats::mtl::MaterialPrefab, rendy::mesh::MeshBuilder, types::Mesh,
-    visibility::BoundingSphere,
+    camera::CameraPrefab, formats::mtl::MaterialPrefab, light::LightPrefab,
+    rendy::mesh::MeshBuilder, types::Mesh, visibility::BoundingSphere,
 };
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
@@ -51,6 +51,8 @@ pub struct GltfPrefab {
     pub transform: Option<Transform>,
     /// `Camera` will always be placed
     pub camera: Option<CameraPrefab>,
+    /// Lights can be added to a prefab with the `KHR_lights_punctual` feature enabled
+    pub light: Option<LightPrefab>,
     /// `MeshData` is placed on all `Entity`s with graphics primitives
     pub mesh: Option<MeshBuilder<'static>>,
     /// Mesh handle after sub asset loading is done
@@ -213,14 +215,19 @@ pub struct GltfSceneOptions {
     pub scene_index: Option<usize>,
 }
 
+type SysDataOf<'a, T> = <T as PrefabData<'a>>::SystemData;
+
 impl<'a> PrefabData<'a> for GltfPrefab {
+    // Looks better when defined all in one place
+    #[allow(clippy::type_complexity)]
     type SystemData = (
-        <Transform as PrefabData<'a>>::SystemData,
-        <Named as PrefabData<'a>>::SystemData,
-        <CameraPrefab as PrefabData<'a>>::SystemData,
-        <MaterialPrefab as PrefabData<'a>>::SystemData,
-        <AnimatablePrefab<usize, Transform> as PrefabData<'a>>::SystemData,
-        <SkinnablePrefab as PrefabData<'a>>::SystemData,
+        SysDataOf<'a, Transform>,
+        SysDataOf<'a, Named>,
+        SysDataOf<'a, CameraPrefab>,
+        SysDataOf<'a, LightPrefab>,
+        SysDataOf<'a, MaterialPrefab>,
+        SysDataOf<'a, AnimatablePrefab<usize, Transform>>,
+        SysDataOf<'a, SkinnablePrefab>,
         WriteStorage<'a, BoundingSphere>,
         WriteStorage<'a, Handle<Mesh>>,
         Read<'a, AssetStorage<Mesh>>,
@@ -240,6 +247,7 @@ impl<'a> PrefabData<'a> for GltfPrefab {
             transforms,
             names,
             cameras,
+            lights,
             materials,
             animatables,
             skinnables,
@@ -257,6 +265,9 @@ impl<'a> PrefabData<'a> for GltfPrefab {
         }
         if let Some(camera) = &self.camera {
             camera.add_to_entity(entity, cameras, entities, children)?;
+        }
+        if let Some(light) = &self.light {
+            light.add_to_entity(entity, lights, entities, children)?;
         }
         if let Some(name) = &self.name {
             name.add_to_entity(entity, names, entities, children)?;
@@ -281,7 +292,7 @@ impl<'a> PrefabData<'a> for GltfPrefab {
         progress: &mut ProgressCounter,
         system_data: &mut Self::SystemData,
     ) -> Result<bool, Error> {
-        let (_, _, _, materials, animatables, _, _, _, meshes_storage, loader, mat_set) =
+        let (_, _, _, _, materials, animatables, _, _, _, meshes_storage, loader, mat_set) =
             system_data;
 
         let mut ret = false;
