@@ -5,14 +5,7 @@ use crate::{
     UiTransform,
 };
 use amethyst_assets::{AssetStorage, Handle};
-use amethyst_core::{
-    ecs::{
-        Component, DenseVecStorage, Entities, Join, Read, ReadStorage, System, SystemData, Write,
-        WriteExpect, WriteStorage,
-    },
-    Hidden, HiddenPropagate,
-};
-use amethyst_derive::SystemDesc;
+use amethyst_core::{ecs::*, Hidden, HiddenPropagate};
 use amethyst_rendy::{
     rendy::{
         command::QueueId,
@@ -51,10 +44,6 @@ pub struct UiGlyphs {
     pub(crate) space_width: f32,
 }
 
-impl Component for UiGlyphs {
-    type Storage = DenseVecStorage<Self>;
-}
-
 #[derive(Debug)]
 enum FontState {
     NotFound,
@@ -87,13 +76,8 @@ impl LineBreaker for CustomLineBreaker {
 
 /// Manages the text editing cursor create, deletion and position.
 #[allow(missing_debug_implementations)]
-#[derive(SystemDesc)]
-#[system_desc(name(UiGlyphsSystemDesc))]
-#[system_desc(insert("UiGlyphsResource { glyph_tex: None }"))]
 pub struct UiGlyphsSystem<B: Backend> {
-    #[system_desc(skip)]
     glyph_brush: GlyphBrush<'static, (u32, UiArgs)>,
-    #[system_desc(skip)]
     fonts_map: HashMap<u32, FontState>,
     marker: PhantomData<B>,
 }

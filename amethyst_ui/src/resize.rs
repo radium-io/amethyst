@@ -1,24 +1,16 @@
-use amethyst_core::{
-    ecs::prelude::{
-        BitSet, Component, ComponentEvent, FlaggedStorage, Join, ReadExpect, System, SystemData,
-        WriteStorage,
-    },
-    shrev::ReaderId,
-};
-use amethyst_derive::SystemDesc;
+use amethyst_core::{ecs::*, shrev::ReaderId};
 use amethyst_window::ScreenDimensions;
 
 #[cfg(feature = "profiler")]
 use thread_profiler::profile_scope;
 
-use super::*;
+use crate::UiTransform;
 
 /// Whenever the window is resized the function in this component will be called on this
 /// entity's UiTransform, along with the new width and height of the window.
 ///
 /// The function in this component is also guaranteed to be called at least once by the
 /// `ResizeSystem` when either the component is attached, or the function is changed.
-#[allow(missing_debug_implementations)]
 pub struct UiResize {
     /// The core function of this component
     pub function: Box<dyn FnMut(&mut UiTransform, (f32, f32)) + Send + Sync>,
@@ -36,31 +28,23 @@ impl UiResize {
     }
 }
 
-impl Component for UiResize {
-    type Storage = FlaggedStorage<Self>;
-}
-
 /// This system rearranges UI elements whenever the screen is resized using their `UiResize`
 /// component.
-#[derive(Debug, SystemDesc)]
-#[system_desc(name(ResizeSystemDesc))]
+#[derive(Debug)]
 pub struct ResizeSystem {
-    #[system_desc(skip)]
     screen_size: (f32, f32),
-    #[system_desc(flagged_storage_reader(UiResize))]
-    resize_events_id: ReaderId<ComponentEvent>,
-    #[system_desc(skip)]
     local_modified: BitSet,
 }
 
 impl ResizeSystem {
-    /// Creates a new ResizeSystem that listens with the given reader Id.
-    pub fn new(resize_events_id: ReaderId<ComponentEvent>) -> ResizeSystem {
+    pub fn new() -> ResizeSystem {
         let screen_size = (0.0, 0.0);
+        let (tx, rx) = crossbeam_channel::unbounded::<world::Event>();
+        world.subscribe(tx, component::<UiResize>());
 
         ResizeSystem {
             screen_size,
-            resize_events_id,
+            rx,
             local_modified: BitSet::default(),
         }
     }

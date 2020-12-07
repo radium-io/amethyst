@@ -1,15 +1,9 @@
 use crate::{
     glyphs::{UiGlyphs, UiGlyphsResource},
-    Selected, TextEditing, UiGlyphsSystemDesc, UiImage, UiTransform,
+    Selected, TextEditing, UiGlyphsSystem, UiImage, UiTransform,
 };
 use amethyst_assets::{AssetStorage, Handle, Loader};
-use amethyst_core::{
-    ecs::{
-        hibitset::BitSet, DispatcherBuilder, Entities, Entity, Join, Read, ReadExpect, ReadStorage,
-        SystemData, World,
-    },
-    Hidden, HiddenPropagate, SystemDesc,
-};
+use amethyst_core::{ecs::*, Hidden, HiddenPropagate};
 use amethyst_error::Error;
 use amethyst_rendy::{
     batch::OrderedOneLevelBatch,
@@ -68,7 +62,7 @@ impl<B: Backend> RenderPlugin<B> for RenderUi {
         builder: &mut DispatcherBuilder<'a, 'b>,
     ) -> Result<(), Error> {
         builder.add(
-            UiGlyphsSystemDesc::<B>::default().build(world),
+            UiGlyphsSystem::<B>::default().build(world),
             "ui_glyphs_system",
             &[],
         );

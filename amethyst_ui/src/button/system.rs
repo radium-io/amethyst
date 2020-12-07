@@ -1,11 +1,9 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use amethyst_core::{
-    ecs::{Entity, ReadExpect, System, SystemData, Write, WriteStorage},
+    ecs::*,
     shrev::{EventChannel, ReaderId},
-    ParentHierarchy,
 };
-use amethyst_derive::SystemDesc;
 
 use crate::{UiButtonAction, UiButtonActionType::*, UiImage, UiText};
 
@@ -59,14 +57,10 @@ where
 /// when necessary.
 ///
 /// It's automatically registered with the `UiBundle`.
-#[derive(Debug, SystemDesc)]
-#[system_desc(name(UiButtonSystemDesc))]
+#[derive(Debug)]
 pub struct UiButtonSystem {
-    #[system_desc(event_channel_reader)]
     event_reader: ReaderId<UiButtonAction>,
-    #[system_desc(skip)]
     set_images: HashMap<Entity, ActionChangeStack<UiImage>>,
-    #[system_desc(skip)]
     set_text_colors: HashMap<Entity, ActionChangeStack<[f32; 4]>>,
 }
 

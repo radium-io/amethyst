@@ -4,17 +4,8 @@ use std::{
     marker::PhantomData,
 };
 
-use amethyst_core::{
-    ecs::{
-        Component, DenseVecStorage, Entities, Entity, Join, Read, ReadExpect, ReadStorage,
-        ReaderId, System, SystemData, Write, WriteStorage,
-    },
-    math::Vector2,
-    shrev::EventChannel,
-    Hidden, HiddenPropagate, ParentHierarchy,
-};
-use amethyst_derive::SystemDesc;
-use amethyst_input::{BindingTypes, InputHandler};
+use amethyst_core::{ecs::*, math::Vector2, shrev::EventChannel, Hidden, HiddenPropagate};
+use amethyst_input::InputHandler;
 use amethyst_window::ScreenDimensions;
 
 use crate::{
@@ -28,46 +19,30 @@ use crate::{
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Draggable;
 
-impl Component for Draggable {
-    type Storage = DenseVecStorage<Self>;
-}
-
-#[derive(Debug, SystemDesc)]
-#[system_desc(name(DragWidgetSystemDesc))]
-pub struct DragWidgetSystem<T: BindingTypes> {
-    #[system_desc(event_channel_reader)]
+#[derive(Debug)]
+pub struct DragWidgetSystem {
     ui_reader_id: ReaderId<UiEvent>,
 
     /// hashmap whose keys are every entities being dragged,
     /// and whose element is a tuple whose first element is
     /// the original mouse position when drag first started,
     /// and second element the mouse position one frame ago
-    #[system_desc(skip)]
     record: HashMap<Entity, (Vector2<f32>, Vector2<f32>)>,
-
-    phantom: PhantomData<T>,
 }
 
-impl<T> DragWidgetSystem<T>
-where
-    T: BindingTypes,
-{
+impl DragWidgetSystem {
     pub fn new(ui_reader_id: ReaderId<UiEvent>) -> Self {
         Self {
             ui_reader_id,
             record: HashMap::new(),
-            phantom: PhantomData,
         }
     }
 }
 
-impl<'s, T> System<'s> for DragWidgetSystem<T>
-where
-    T: BindingTypes,
-{
+impl<'s> System<'s> for DragWidgetSystem {
     type SystemData = (
         Entities<'s>,
-        Read<'s, InputHandler<T>>,
+        Read<'s, InputHandler>,
         ReadExpect<'s, ScreenDimensions>,
         ReadExpect<'s, ParentHierarchy>,
         ReadStorage<'s, Hidden>,
@@ -132,7 +107,7 @@ where
             let change = mouse_pos - *prev;
 
             let (parent_width, parent_height) =
-                get_parent_pixel_size(*entity, &hierarchy, &ui_transforms, &screen_dimensions);
+                get_parent_pixel_size(*entity, &world, &screen_dimensions);
 
             let ui_transform = ui_transforms.get_mut(*entity).unwrap();
             let (scale_x, scale_y) = match ui_transform.scale_mode {

@@ -3,9 +3,8 @@ use std::marker::PhantomData;
 use derivative::Derivative;
 
 use amethyst_core::{
-    ecs::prelude::{Component, Read, ReadStorage, System, SystemData, World, Write},
+    ecs::*,
     shrev::{Event, EventChannel, ReaderId},
-    SystemDesc,
 };
 
 use crate::event::TargetedEvent;
@@ -50,16 +49,7 @@ pub trait EventRetrigger: Component {
         R: EventReceiver<Self::Out>;
 }
 
-// Unable to derive `SystemDesc` on `EventRetriggerSystem` because the proc macro doesn't yet
-// support creating a `PhantomData` for computed fields.
-/// Builds an `EventRetriggerSystem`.
-#[derive(Derivative, Debug)]
-#[derivative(Default(bound = ""))]
-pub struct EventRetriggerSystemDesc<T> {
-    marker: PhantomData<T>,
-}
-
-impl<'a, 'b, T> SystemDesc<'a, 'b, EventRetriggerSystem<T>> for EventRetriggerSystemDesc<T>
+impl<'a, 'b, T> System<'a, 'b, EventRetriggerSystem<T>> for EventRetriggerSystem<T>
 where
     T: EventRetrigger,
 {

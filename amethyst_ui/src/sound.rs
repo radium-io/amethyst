@@ -1,25 +1,18 @@
 use amethyst_assets::AssetStorage;
 use amethyst_audio::{output::Output, Source, SourceHandle};
 use amethyst_core::{
-    ecs::{
-        prelude::{Component, DenseVecStorage},
-        Read, System, SystemData, Write,
-    },
+    ecs::*,
     shrev::{EventChannel, ReaderId},
 };
-use amethyst_derive::SystemDesc;
 
 use crate::{
     event::{UiEvent, UiEventType::*},
-    event_retrigger::{EventRetrigger, EventRetriggerSystem, EventRetriggerSystemDesc},
+    event_retrigger::{EventRetrigger, EventRetriggerSystem},
     EventReceiver,
 };
 
 #[cfg(feature = "profiler")]
 use thread_profiler::profile_scope;
-
-/// Builds a `UiSoundRetriggerSystem`.
-pub type UiSoundRetriggerSystemDesc = EventRetriggerSystemDesc<UiSoundRetrigger>;
 
 /// Provides an `EventRetriggerSystem` that will handle incoming `UiEvent`s
 /// and trigger `UiPlaySoundAction`s for entities with attached
@@ -42,10 +35,6 @@ pub struct UiSoundRetrigger {
     pub on_hover_start: Option<UiPlaySoundAction>,
     /// The sound that is played when the user stops hovering over the entity
     pub on_hover_stop: Option<UiPlaySoundAction>,
-}
-
-impl Component for UiSoundRetrigger {
-    type Storage = DenseVecStorage<Self>;
 }
 
 impl EventRetrigger for UiSoundRetrigger {
@@ -72,10 +61,8 @@ impl EventRetrigger for UiSoundRetrigger {
 
 /// Handles any dispatches `UiPlaySoundAction`s and plays the received
 /// sounds through the set `Output`.
-#[derive(Debug, SystemDesc)]
-#[system_desc(name(UiSoundSystemDesc))]
+#[derive(Debug)]
 pub struct UiSoundSystem {
-    #[system_desc(event_channel_reader)]
     event_reader: ReaderId<UiPlaySoundAction>,
 }
 

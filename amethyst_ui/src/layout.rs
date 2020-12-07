@@ -4,13 +4,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "profiler")]
 use thread_profiler::profile_scope;
 
-use amethyst_core::{
-    ecs::prelude::{
-        BitSet, ComponentEvent, Join, ReadExpect, ReadStorage, ReaderId, System, SystemData, World,
-        WriteStorage,
-    },
-    HierarchyEvent, Parent, ParentHierarchy, SystemDesc,
-};
+use amethyst_core::{ecs::*, transform::Parent};
 use amethyst_window::ScreenDimensions;
 
 use super::UiTransform;
@@ -124,217 +118,145 @@ pub enum Stretch {
     },
 }
 
-/// Builds a `UiTransformSystem`.
-#[derive(Default, Debug)]
-pub struct UiTransformSystemDesc;
-
-impl<'a, 'b> SystemDesc<'a, 'b, UiTransformSystem> for UiTransformSystemDesc {
-    fn build(self, world: &mut World) -> UiTransformSystem {
-        <UiTransformSystem as System<'_>>::SystemData::setup(world);
-
-        let parent_events_id = world.fetch_mut::<ParentHierarchy>().track();
-        let mut transforms = WriteStorage::<UiTransform>::fetch(&world);
-        let transform_events_id = transforms.register_reader();
-
-        UiTransformSystem::new(transform_events_id, parent_events_id)
-    }
-}
-
 /// Manages the `Parent` component on entities having `UiTransform`
 /// It does almost the same as the `TransformSystem`, but with some differences,
 /// like `UiTransform` alignment and stretching.
 #[derive(Debug)]
 pub struct UiTransformSystem {
-    transform_modified: BitSet,
-    transform_events_id: ReaderId<ComponentEvent>,
-    parent_events_id: ReaderId<HierarchyEvent>,
     screen_size: (f32, f32),
 }
 
-impl UiTransformSystem {
+impl<'a> UiTransformSystem {
     /// Creates a new `UiTransformSystem`.
-    pub fn new(
-        transform_events_id: ReaderId<ComponentEvent>,
-        parent_events_id: ReaderId<HierarchyEvent>,
-    ) -> Self {
+    pub fn new(world: &World) -> Self {
         Self {
-            transform_modified: BitSet::default(),
-            transform_events_id,
-            parent_events_id,
             screen_size: (0.0, 0.0),
         }
     }
-}
 
-impl<'a> System<'a> for UiTransformSystem {
-    type SystemData = (
-        WriteStorage<'a, UiTransform>,
-        ReadStorage<'a, Parent>,
-        ReadExpect<'a, ScreenDimensions>,
-        ReadExpect<'a, ParentHierarchy>,
-    );
-    fn run(&mut self, data: Self::SystemData) {
-        #[cfg(feature = "profiler")]
-        profile_scope!("ui_transform_system");
+    pub fn build(&'static mut self) -> Box<dyn Runnable> {
+        Box::new(
+            SystemBuilder::<()>::new("UiTransformSystem")
+                .read_resource::<ScreenDimensions>()
+                .with_query(
+                    <(Entity, Write<UiTransform>, Read<Parent>)>::query()
+                        .filter(maybe_changed::<UiTransform>()),
+                )
+                .with_query(<(Entity, Read<Parent>)>::query())
+                .build(move |commands, world, screen_dim, (query, parents)| {
+                    let current_screen_size = (screen_dim.width(), screen_dim.height());
+                    let screen_resized = current_screen_size != self.screen_size;
+                    self.screen_size = current_screen_size;
+                    if screen_resized {
+                        process_root_iter(
+                            <Write<UiTransform>>::query()
+                                .filter(!component::<Parent>())
+                                .iter_mut(world),
+                            &*screen_dim,
+                        );
+                    } else {
+                        // FIXME: should only process modified UI
+                        process_root_iter(
+                            <Write<UiTransform>>::query()
+                                .filter(!component::<Parent>())
+                                .iter_mut(world),
+                            &*screen_dim,
+                        );
+                    }
 
-        let (mut transforms, parents, screen_dim, hierarchy) = data;
-
-        self.transform_modified.clear();
-
-        let self_transform_modified = &mut self.transform_modified;
-
-        let self_transform_events_id = &mut self.transform_events_id;
-
-        transforms
-            .channel()
-            .read(self_transform_events_id)
-            .for_each(|event| match event {
-                ComponentEvent::Inserted(id) | ComponentEvent::Modified(id) => {
-                    self_transform_modified.add(*id);
-                }
-                ComponentEvent::Removed(_id) => {}
-            });
-
-        for event in hierarchy.changed().read(&mut self.parent_events_id) {
-            if let HierarchyEvent::Modified(entity) = *event {
-                self_transform_modified.add(entity.id());
-            }
-        }
-
-        let current_screen_size = (screen_dim.width(), screen_dim.height());
-        let screen_resized = current_screen_size != self.screen_size;
-        self.screen_size = current_screen_size;
-        if screen_resized {
-            process_root_iter(
-                (&mut transforms, !&parents).join().map(|i| i.0),
-                &*screen_dim,
-            );
-        } else {
-            // Immutable borrow
-            let self_transform_modified = &*self_transform_modified;
-            process_root_iter(
-                (&mut transforms, !&parents, self_transform_modified)
-                    .join()
-                    .map(|i| i.0),
-                &*screen_dim,
-            );
-        }
-
-        // Populate the modifications we just did.
-        transforms
-            .channel()
-            .read(self_transform_events_id)
-            .for_each(|event| {
-                if let ComponentEvent::Modified(id) = event {
-                    self_transform_modified.add(*id);
-                }
-            });
-
-        // Compute transforms with parents.
-        for entity in hierarchy.all() {
-            {
-                let self_dirty = self_transform_modified.contains(entity.id());
-                let parent_entity = match parents.get(*entity) {
-                    Some(p) => p.entity,
-                    None => continue, // Skip this entity iteration, as its dirty
-                };
-                let parent_dirty = self_transform_modified.contains(parent_entity.id());
-                if parent_dirty || self_dirty || screen_resized {
-                    let parent_transform_copy = transforms.get(parent_entity).cloned();
-                    let transform = transforms.get_mut(*entity);
-
-                    let (transform, parent_transform_copy) =
-                        match (transform, parent_transform_copy) {
-                            (Some(v1), Some(v2)) => (v1, v2),
-                            _ => continue,
-                        };
-
-                    let norm = transform.anchor.norm_offset();
-                    transform.pixel_x =
-                        parent_transform_copy.pixel_x + parent_transform_copy.pixel_width * norm.0;
-                    transform.pixel_y =
-                        parent_transform_copy.pixel_y + parent_transform_copy.pixel_height * norm.1;
-                    transform.global_z = parent_transform_copy.global_z + transform.local_z;
-
-                    let new_size = match transform.stretch {
-                        Stretch::NoStretch => (transform.width, transform.height),
-                        Stretch::X { x_margin } => (
-                            parent_transform_copy.pixel_width - x_margin * 2.0,
-                            transform.height,
-                        ),
-                        Stretch::Y { y_margin } => (
-                            transform.width,
-                            parent_transform_copy.pixel_height - y_margin * 2.0,
-                        ),
-                        Stretch::XY {
-                            keep_aspect_ratio: false,
-                            x_margin,
-                            y_margin,
-                        } => (
-                            parent_transform_copy.pixel_width - x_margin * 2.0,
-                            parent_transform_copy.pixel_height - y_margin * 2.0,
-                        ),
-                        Stretch::XY {
-                            keep_aspect_ratio: true,
-                            x_margin,
-                            y_margin,
-                        } => {
-                            let scale = f32::min(
-                                (parent_transform_copy.pixel_width - x_margin * 2.0)
-                                    / transform.width,
-                                (parent_transform_copy.pixel_height - y_margin * 2.0)
-                                    / transform.height,
-                            );
-
-                            (transform.width * scale, transform.height * scale)
+                    /* FIXME: we don't have modified event in legion
+                    // Populate the modifications we just did.
+                    self.events.try_iter().for_each(|event| {
+                        if let ComponentEvent::Modified(id) = event {
+                            self_transform_modified.add(*id);
                         }
+                    });*/
+
+                    let transforms: Vec<(Entity, UiTransform)> = {
+                        <(Entity, Read<UiTransform>)>::query()
+                            .iter(world)
+                            .map(|x| (*x.0, x.1.clone()))
+                            .collect()
                     };
-                    transform.width = new_size.0;
-                    transform.height = new_size.1;
-                    match transform.scale_mode {
-                        ScaleMode::Pixel => {
-                            transform.pixel_x += transform.local_x;
-                            transform.pixel_y += transform.local_y;
-                            transform.pixel_width = transform.width;
-                            transform.pixel_height = transform.height;
-                        }
-                        ScaleMode::Percent => {
-                            transform.pixel_x +=
-                                transform.local_x * parent_transform_copy.pixel_width;
-                            transform.pixel_y +=
-                                transform.local_y * parent_transform_copy.pixel_height;
-                            transform.pixel_width =
-                                transform.width * parent_transform_copy.pixel_width;
-                            transform.pixel_height =
-                                transform.height * parent_transform_copy.pixel_height;
+
+                    // Compute transforms with parents.
+                    for (entity, transform, parent) in query.iter_mut(world) {
+                        {
+                            if let Some(parent_transform_copy) = transforms
+                                .iter()
+                                .find(|x| x.0 == parent.0)
+                                .map(|x| x.1.clone())
+                            {
+                                let norm = transform.anchor.norm_offset();
+                                transform.pixel_x = parent_transform_copy.pixel_x
+                                    + parent_transform_copy.pixel_width * norm.0;
+                                transform.pixel_y = parent_transform_copy.pixel_y
+                                    + parent_transform_copy.pixel_height * norm.1;
+                                transform.global_z =
+                                    parent_transform_copy.global_z + transform.local_z;
+
+                                let new_size = match transform.stretch {
+                                    Stretch::NoStretch => (transform.width, transform.height),
+                                    Stretch::X { x_margin } => (
+                                        parent_transform_copy.pixel_width - x_margin * 2.0,
+                                        transform.height,
+                                    ),
+                                    Stretch::Y { y_margin } => (
+                                        transform.width,
+                                        parent_transform_copy.pixel_height - y_margin * 2.0,
+                                    ),
+                                    Stretch::XY {
+                                        keep_aspect_ratio: false,
+                                        x_margin,
+                                        y_margin,
+                                    } => (
+                                        parent_transform_copy.pixel_width - x_margin * 2.0,
+                                        parent_transform_copy.pixel_height - y_margin * 2.0,
+                                    ),
+                                    Stretch::XY {
+                                        keep_aspect_ratio: true,
+                                        x_margin,
+                                        y_margin,
+                                    } => {
+                                        let scale = f32::min(
+                                            (parent_transform_copy.pixel_width - x_margin * 2.0)
+                                                / transform.width,
+                                            (parent_transform_copy.pixel_height - y_margin * 2.0)
+                                                / transform.height,
+                                        );
+
+                                        (transform.width * scale, transform.height * scale)
+                                    }
+                                };
+                                transform.width = new_size.0;
+                                transform.height = new_size.1;
+
+                                match transform.scale_mode {
+                                    ScaleMode::Pixel => {
+                                        transform.pixel_x += transform.local_x;
+                                        transform.pixel_y += transform.local_y;
+                                        transform.pixel_width = transform.width;
+                                        transform.pixel_height = transform.height;
+                                    }
+                                    ScaleMode::Percent => {
+                                        transform.pixel_x +=
+                                            transform.local_x * parent_transform_copy.pixel_width;
+                                        transform.pixel_y +=
+                                            transform.local_y * parent_transform_copy.pixel_height;
+                                        transform.pixel_width =
+                                            transform.width * parent_transform_copy.pixel_width;
+                                        transform.pixel_height =
+                                            transform.height * parent_transform_copy.pixel_height;
+                                    }
+                                }
+                                let pivot_norm = transform.pivot.norm_offset();
+                                transform.pixel_x += transform.pixel_width * -pivot_norm.0;
+                                transform.pixel_y += transform.pixel_height * -pivot_norm.1;
+                            }
                         }
                     }
-                    let pivot_norm = transform.pivot.norm_offset();
-                    transform.pixel_x += transform.pixel_width * -pivot_norm.0;
-                    transform.pixel_y += transform.pixel_height * -pivot_norm.1;
-                }
-            }
-            // Populate the modifications we just did.
-            transforms
-                .channel()
-                .read(self_transform_events_id)
-                .for_each(|event| {
-                    if let ComponentEvent::Modified(id) = event {
-                        self_transform_modified.add(*id);
-                    }
-                });
-        }
-        // We need to treat any changes done inside the system as non-modifications, so we read out
-        // any events that were generated during the system run
-        transforms
-            .channel()
-            .read(self_transform_events_id)
-            .for_each(|event| match event {
-                ComponentEvent::Inserted(id) | ComponentEvent::Modified(id) => {
-                    self_transform_modified.add(*id);
-                }
-                ComponentEvent::Removed(_id) => {}
-            });
+                }),
+        )
     }
 }
 

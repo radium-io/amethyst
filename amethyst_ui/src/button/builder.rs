@@ -2,13 +2,7 @@ use smallvec::{smallvec, SmallVec};
 
 use amethyst_assets::{AssetStorage, Loader};
 use amethyst_audio::SourceHandle;
-use amethyst_core::{
-    ecs::{
-        prelude::{Entities, Entity, Read, ReadExpect, World, WriteExpect, WriteStorage},
-        shred::{ResourceId, SystemData},
-    },
-    Parent,
-};
+use amethyst_core::ecs::*;
 use amethyst_rendy::{palette::Srgba, rendy::texture::palette::load_from_srgba, Texture};
 
 use crate::{
@@ -29,7 +23,6 @@ const DEFAULT_BKGD_COLOR: [f32; 4] = [0.82, 0.83, 0.83, 1.0];
 const DEFAULT_TXT_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
 /// Container for all the resources the builder needs to make a new UiButton.
-#[derive(SystemData)]
 #[allow(missing_debug_implementations)]
 pub struct UiButtonBuilderResources<'a, G: PartialEq + Send + Sync + 'static, I: WidgetId = u32> {
     font_asset: Read<'a, AssetStorage<FontAsset>>,

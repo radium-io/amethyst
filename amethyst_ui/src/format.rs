@@ -21,7 +21,6 @@ amethyst_assets::register_format_type!(FontData);
 impl Asset for FontAsset {
     const NAME: &'static str = "ui::Font";
     type Data = FontData;
-    type HandleStorage = Vec<Handle<Self>>;
 }
 
 impl ProcessableAsset for FontAsset {

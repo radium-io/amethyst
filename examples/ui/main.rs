@@ -1,12 +1,9 @@
-//! Displays a shaded sphere to the user.
-
 use amethyst::{
-    assets::{PrefabLoader, PrefabLoaderSystemDesc, Processor, RonFormat},
     audio::{output::init_output, Source},
     core::{frame_limiter::FrameRateLimitStrategy, transform::TransformBundle, Time},
     derive::SystemDesc,
-    ecs::prelude::{Entity, System, SystemData, WorldExt, Write},
-    input::{is_close_requested, is_key_down, InputBundle, StringBindings},
+    ecs::*,
+    input::{is_close_requested, is_key_down, InputBundle},
     prelude::*,
     renderer::{
         plugins::RenderToWindow,
@@ -15,13 +12,10 @@ use amethyst::{
         RenderingBundle,
     },
     shrev::{EventChannel, ReaderId},
-    ui::{
-        Anchor, RenderUi, UiBundle, UiButtonBuilder, UiCreator, UiEvent, UiFinder, UiImage, UiText,
-    },
+    ui::{Anchor, RenderUi, UiBundle, UiEvent, UiFinder, UiImage, UiText},
     utils::{
         application_root_dir,
         fps_counter::{FpsCounter, FpsCounterBundle},
-        scene::BasicScenePrefab,
     },
     winit::VirtualKeyCode,
 };
@@ -51,14 +45,22 @@ impl SimpleState for Example {
                 .build_from_world(&world);
 
         // Initialise the scene with an object, a light and a camera.
+        /*
+        FIXME: bring back with prefabs
         let handle = world.exec(|loader: PrefabLoader<'_, MyPrefabData>| {
             loader.load("prefab/sphere.ron", RonFormat, ())
         });
+
         world.create_entity().with(handle).build();
+        */
         init_output(&mut world);
+
+        /*
+        FIXME: bring back with UiCreator
         world.exec(|mut creator: UiCreator<'_>| {
             creator.create("ui/example.ron", ());
         });
+        */
     }
 
     fn handle_event(
@@ -145,8 +147,8 @@ fn main() -> amethyst::Result<()> {
     let game_data = GameDataBuilder::default()
         .with_system_desc(PrefabLoaderSystemDesc::<MyPrefabData>::default(), "", &[])
         .with_bundle(TransformBundle::new())?
-        .with_bundle(InputBundle::<StringBindings>::new())?
-        .with_bundle(UiBundle::<StringBindings>::new())?
+        .with_bundle(InputBundle::new())?
+        .with_bundle(UiBundle::new())?
         .with(Processor::<Source>::new(), "source_processor", &[])
         .with_system_desc(UiEventHandlerSystemDesc::default(), "ui_event_handler", &[])
         .with_bundle(FpsCounterBundle::default())?

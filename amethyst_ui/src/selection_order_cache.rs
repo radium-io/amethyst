@@ -1,4 +1,4 @@
-use amethyst_core::ecs::prelude::*;
+use amethyst_core::ecs::*;
 use derive_new::new;
 use std::{cmp::Ordering, marker::PhantomData};
 
@@ -43,9 +43,9 @@ impl CachedSelectionOrder {
 }
 
 /// System in charge of updating the CachedSelectionOrder resource on each frame.
-pub fn build_cache_selection_order_system<G>() -> Box<dyn Schedulable> 
-where 
-    G:  PartialEq + Send + Sync + 'static,
+pub fn build_cache_selection_order_system<G>() -> Box<dyn Schedulable>
+where
+    G: PartialEq + Send + Sync + 'static,
 {
     SystemBuilder::<()>::new("CacheSelectionOrderSystem")
         .write_resource::<CachedSelectionOrder>()
@@ -54,7 +54,6 @@ where
         .build(move |commands, world, cache, query| {
             #[cfg(feature = "profiler")]
             profile_scope!("cache_selection_order_system");
-    
             {
                 let mut rm = vec![];
                 cache.cache.retain(|&(_t, entity)| {
@@ -91,13 +90,11 @@ where
                             None => pushes.push((selectable.order, entity)),
                         }
                     }
-
                 }
                 inserts.iter().for_each(|e| cache.cache.insert(e.0, e.1));
                 pushes.iter().for_each(|e| cache.cache.push(*e));
             }
             cache.cached = transform_set;
-    
             // Sort from smallest tab order to largest tab order, then by entity creation time.
             // Most of the time this shouldn't do anything but you still need it for if the tab orders
             // change.

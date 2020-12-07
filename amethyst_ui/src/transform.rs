@@ -1,15 +1,7 @@
 use std::marker::PhantomData;
 
-use amethyst_core::{
-    ecs::{
-        prelude::{
-            Component, DenseVecStorage, Entities, Entity, FlaggedStorage, Join, ReadStorage, World,
-        },
-        shred::{ResourceId, SystemData},
-        storage::GenericReadStorage,
-    },
-    ParentHierarchy,
-};
+use amethyst_core::ecs::*;
+use amethyst_core::transform::Parent;
 use amethyst_window::ScreenDimensions;
 
 use serde::{Deserialize, Serialize};
@@ -17,20 +9,16 @@ use serde::{Deserialize, Serialize};
 use super::{Anchor, ScaleMode, Stretch};
 
 /// Utility `SystemData` for finding UI entities based on `UiTransform` id
-#[derive(SystemData)]
-#[allow(missing_debug_implementations)]
-pub struct UiFinder<'a> {
-    entities: Entities<'a>,
-    storage: ReadStorage<'a, UiTransform>,
-}
+pub struct UiFinder;
 
-impl<'a> UiFinder<'a> {
+impl UiFinder {
     /// Find the `UiTransform` entity with the given id
-    pub fn find(&self, id: &str) -> Option<Entity> {
-        (&*self.entities, &self.storage)
-            .join()
+    pub fn find(&self, world: &World, id: &str) -> Option<Entity> {
+        let mut query = <(Entity, &UiTransform)>::query();
+        query
+            .iter(world)
             .find(|(_, transform)| transform.id == id)
-            .map(|(entity, _)| entity)
+            .map(|(entity, _)| *entity)
     }
 }
 
@@ -183,22 +171,19 @@ impl UiTransform {
     }
 }
 
-impl Component for UiTransform {
-    type Storage = FlaggedStorage<Self, DenseVecStorage<Self>>;
-}
-
 /// Get the (width, height) in pixels of the parent of this `UiTransform`.
-pub fn get_parent_pixel_size<S: GenericReadStorage<Component = UiTransform>>(
+pub fn get_parent_pixel_size(
     entity: Entity,
-    hierarchy: &ParentHierarchy,
-    ui_transforms: &S,
+    world: &World,
     screen_dimensions: &ScreenDimensions,
 ) -> (f32, f32) {
     let mut parent_width = screen_dimensions.width();
     let mut parent_height = screen_dimensions.height();
+    let mut transforms = <Read<UiTransform>>::query();
+    let mut parents = <(Entity, Read<Parent>)>::query();
 
-    if let Some(parent) = hierarchy.parent(entity) {
-        if let Some(ui_transform) = ui_transforms.get(parent) {
+    if let Ok((entity, parent)) = parents.get(world, entity) {
+        if let Ok(ui_transform) = transforms.get(world, *entity) {
             parent_width = ui_transform.pixel_width();
             parent_height = ui_transform.pixel_height();
         }

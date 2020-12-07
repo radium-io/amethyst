@@ -7,16 +7,10 @@ use std::{
 
 use amethyst_assets::{
     AssetPrefab, AssetStorage, Format, Handle, Loader, Prefab, PrefabData, PrefabLoaderSystem,
-    PrefabLoaderSystemDesc, Progress, ProgressCounter,
+    PrefabLoaderSystem, Progress, ProgressCounter,
 };
 use amethyst_audio::Source as Audio;
-use amethyst_core::{
-    ecs::{
-        prelude::{Entities, Entity, Read, ReadExpect, World, Write, WriteStorage},
-        shred::{ResourceId, SystemData},
-    },
-    HiddenPropagate,
-};
+use amethyst_core::{ecs::*, HiddenPropagate};
 use amethyst_error::{format_err, Error, ResultExt};
 use amethyst_rendy::TexturePrefab;
 
@@ -1017,7 +1011,6 @@ fn walk_ui_tree<C, W>(
 ///     loader.load("renderable.ron", ())
 /// });
 /// ```
-#[derive(SystemData)]
 #[allow(missing_debug_implementations)]
 pub struct UiLoader<'a, C = NoCustomUi, W = u32>
 where
@@ -1060,7 +1053,6 @@ where
 ///     creator.create("renderable.ron", ())
 /// });
 /// ```
-#[derive(SystemData)]
 #[allow(missing_debug_implementations)]
 pub struct UiCreator<'a, C = NoCustomUi, W = u32>
 where
@@ -1105,7 +1097,7 @@ where
 }
 
 /// Builds a `UiLoaderSystem`.
-pub type UiLoaderSystemDesc<CD, W> = PrefabLoaderSystemDesc<UiPrefabData<CD, W>>;
+pub type UiLoaderSystem<CD, W> = PrefabLoaderSystem<UiPrefabData<CD, W>>;
 
 /// Prefab loader system for UI
 ///

@@ -1,29 +1,23 @@
-use std::ops::Range;
-
+use crate::{LineMode, Selected, TextEditing, UiEvent, UiEventType, UiText};
+use amethyst_core::{
+    ecs::*,
+    shrev::{EventChannel, ReaderId},
+};
 use clipboard::{ClipboardContext, ClipboardProvider};
 use log::error;
+use std::ops::Range;
 use unicode_normalization::{char::is_combining_mark, UnicodeNormalization};
 use unicode_segmentation::UnicodeSegmentation;
 use winit::{ElementState, Event, KeyboardInput, ModifiersState, VirtualKeyCode, WindowEvent};
-
-use amethyst_core::{
-    ecs::prelude::{Entities, Join, Read, ReadStorage, System, SystemData, Write, WriteStorage},
-    shrev::{EventChannel, ReaderId},
-};
-use amethyst_derive::SystemDesc;
-
-use crate::{LineMode, Selected, TextEditing, UiEvent, UiEventType, UiText};
 
 /// System managing the keyboard inputs for the editable text fields.
 /// ## Features
 /// * Adds and removes text.
 /// * Moves selection cursor.
 /// * Grows and shrinks selected text zone.
-#[derive(Debug, SystemDesc)]
-#[system_desc(name(TextEditingInputSystemDesc))]
+#[derive(Debug)]
 pub struct TextEditingInputSystem {
     /// A reader for winit events.
-    #[system_desc(event_channel_reader)]
     reader: ReaderId<Event>,
 }
 

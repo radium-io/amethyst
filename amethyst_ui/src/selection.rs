@@ -5,16 +5,8 @@ use derive_new::new;
 use serde::{Deserialize, Serialize};
 use winit::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 
-use amethyst_core::{
-    ecs::{
-        Component, DenseVecStorage, Entities, FlaggedStorage, Join, Read, ReadStorage, ReaderId,
-        System, SystemData, World, Write, WriteStorage,
-    },
-    shrev::EventChannel,
-    SystemDesc,
-};
-use amethyst_derive::SystemDesc;
-use amethyst_input::{BindingTypes, InputHandler};
+use amethyst_core::{ecs::*, shrev::EventChannel};
+use amethyst_input::InputHandler;
 
 use crate::{CachedSelectionOrder, UiEvent, UiEventType};
 
@@ -44,28 +36,18 @@ pub struct Selectable<G> {
     pub consumes_inputs: bool,
 }
 
-impl<G: Send + Sync + 'static> Component for Selectable<G> {
-    type Storage = FlaggedStorage<Self, DenseVecStorage<Self>>;
-}
-
 /// Component indicating that a Ui entity is currently selected.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Selected;
 
-impl Component for Selected {
-    type Storage = DenseVecStorage<Self>;
-}
-
 /// System managing the selection of entities.
 /// Reacts to `UiEvent`.
 /// Reacts to Tab and Shift+Tab.
-#[derive(Debug, SystemDesc)]
-#[system_desc(name(SelectionKeyboardSystemDesc))]
+#[derive(Debug)]
 pub struct SelectionKeyboardSystem<G>
 where
     G: Send + Sync + 'static + PartialEq,
 {
-    #[system_desc(event_channel_reader)]
     window_reader_id: ReaderId<Event>,
     phantom: PhantomData<G>,
 }
@@ -180,23 +162,11 @@ where
     }
 }
 
-/// Builds a `SelectionMouseSystem`.
-#[derive(Derivative, Debug)]
-#[derivative(Default(bound = ""))]
-pub struct SelectionMouseSystemDesc<G, T>
+impl<'a, 'b, G> System<'a, 'b, SelectionMouseSystem<G>> for SelectionMouseSystem<G>
 where
     G: Send + Sync + 'static + PartialEq,
-    T: BindingTypes,
 {
-    marker: PhantomData<(G, T)>,
-}
-
-impl<'a, 'b, G, T> SystemDesc<'a, 'b, SelectionMouseSystem<G, T>> for SelectionMouseSystemDesc<G, T>
-where
-    G: Send + Sync + 'static + PartialEq,
-    T: BindingTypes,
-{
-    fn build(self, world: &mut World) -> SelectionMouseSystem<G, T> {
+    fn build(self, world: &mut World) -> SelectionMouseSystem<G> {
         <SelectionMouseSystem<G, T> as System<'_>>::SystemData::setup(world);
 
         let ui_reader_id = world.fetch_mut::<EventChannel<UiEvent>>().register_reader();
@@ -207,15 +177,12 @@ where
 
 /// System handling the clicks on ui entities and selecting them, if applicable.
 #[derive(Debug)]
-pub struct SelectionMouseSystem<G, T>
-where
-    T: BindingTypes,
-{
+pub struct SelectionMouseSystem<G> {
     ui_reader_id: ReaderId<UiEvent>,
-    phantom: PhantomData<(G, T)>,
+    phantom: PhantomData<(G)>,
 }
 
-impl<G, T: BindingTypes> SelectionMouseSystem<G, T>
+impl<G> SelectionMouseSystem<G>
 where
     G: Send + Sync + 'static + PartialEq,
 {
@@ -228,7 +195,7 @@ where
     }
 }
 
-impl<'a, G, T: BindingTypes> System<'a> for SelectionMouseSystem<G, T>
+impl<'a, G> System<'a> for SelectionMouseSystem<G>
 where
     G: Send + Sync + 'static + PartialEq,
 {
@@ -237,7 +204,7 @@ where
         Read<'a, CachedSelectionOrder>,
         WriteStorage<'a, Selected>,
         ReadStorage<'a, Selectable<G>>,
-        Read<'a, InputHandler<T>>,
+        Read<'a, InputHandler>,
         Entities<'a>,
     );
     fn run(

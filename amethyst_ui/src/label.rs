@@ -4,10 +4,7 @@ use crate::{
 };
 
 use amethyst_assets::{AssetStorage, Loader};
-use amethyst_core::ecs::{
-    prelude::{Entities, Entity, Read, ReadExpect, World, WriteExpect, WriteStorage},
-    shred::{ResourceId, SystemData},
-};
+use amethyst_core::ecs::*;
 
 const DEFAULT_Z: f32 = 1.0;
 const DEFAULT_WIDTH: f32 = 128.0;
@@ -24,7 +21,6 @@ define_widget!(UiLabel =>
 
 /// Container for all the resources the builder needs to make a new UiLabel.
 #[allow(missing_debug_implementations)]
-#[derive(SystemData)]
 pub struct UiLabelBuilderResources<'a, I: WidgetId = u32>
 where
     I: WidgetId,
